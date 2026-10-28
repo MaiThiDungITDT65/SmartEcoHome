@@ -1,0 +1,257 @@
+"use client";
+
+import React from "react";
+import { useSmartGardenSocket } from "@/hooks/use-smart-garden-socket";
+import { DashboardHeader } from "@/components/dashboard-header";
+import { SensorCard } from "@/components/sensor-card";
+import { GreenhouseSection } from "@/components/greenhouse-section";
+import { SmartDoorSection } from "@/components/smart-door-section";
+import { ParkingSection } from "@/components/parking-section";
+import { RainPreventionSection } from "@/components/rain-prevention-section";
+import { SecuritySection } from "@/components/security-section";
+import { SystemMetadataSection } from "@/components/system-metadata-section";
+import {
+  Thermometer,
+  Droplets,
+  Sprout,
+  Sun,
+  CloudRain,
+  Car,
+  Zap,
+  AlertTriangle,
+  Info,
+  Radio,
+} from "lucide-react";
+import { formatBoolean } from "@/lib/dashboard-utils";
+
+export default function DashboardPage() {
+  const {
+    state,
+    deviceOnline,
+    hasTelemetry,
+    lastSeen,
+    connectionState,
+    isBackendReachable,
+    isStale,
+    error,
+    refresh,
+  } = useSmartGardenSocket();
+
+  const greenhouse = state?.greenhouse;
+  const parking = state?.parking;
+  const flood = state?.flood_prevention;
+  const system = state?.system;
+
+  const hasTemp = greenhouse?.temperature !== null && greenhouse?.temperature !== undefined;
+  const hasHumid = greenhouse?.humidity !== null && greenhouse?.humidity !== undefined;
+
+  return (
+    <div className="min-h-screen flex flex-col bg-[#f5f7f4] text-stone-900">
+      {/* Sticky Dashboard Header */}
+      <DashboardHeader
+        connectionState={connectionState}
+        deviceOnline={deviceOnline}
+        hasTelemetry={hasTelemetry}
+        isBackendReachable={isBackendReachable}
+        isStale={isStale}
+        lastSeen={lastSeen}
+        onRefresh={refresh}
+      />
+
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Error / Offline Alert Banner */}
+        {(!isBackendReachable || error) && (
+          <div
+            role="alert"
+            className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start gap-3 text-rose-900 shadow-xs"
+          >
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div className="text-xs">
+              <p className="font-semibold text-rose-950">Mất kết nối với máy chủ Backend</p>
+              <p className="text-rose-700 mt-0.5">
+                {error || "Không thể kết nối đến máy chủ FastAPI tại 127.0.0.1:8000. Đang thử kết nối lại tự động..."}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Initial Empty State Banner (when server is running but ESP32 hasn't sent telemetry yet) */}
+        {!hasTelemetry && isBackendReachable && (
+          <div className="bg-teal-900/5 border border-teal-800/15 rounded-xl p-5 flex items-start gap-3.5 text-stone-800">
+            <Radio className="w-5 h-5 text-teal-700 shrink-0 mt-0.5 animate-pulse" />
+            <div>
+              <h2 className="text-sm font-semibold text-stone-900">
+                Đang chờ tín hiệu dữ liệu từ ESP32 Gateway...
+              </h2>
+              <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                Máy chủ FastAPI đã sẵn sàng và đang lắng nghe. Khi phần cứng ESP32 gửi gói tin telemetry đầu tiên qua HTTP POST, bảng điều khiển sẽ tự động cập nhật ngay tức thì mà không cần tải lại trang.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Stale Telemetry Warning Banner */}
+        {hasTelemetry && !deviceOnline && (
+          <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3.5 flex items-center justify-between text-amber-900 text-xs">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-amber-700" />
+              <span>
+                <strong>ESP32 mất tín hiệu:</strong> Không nhận được gói tin telemetry mới trong hơn 30 giây qua. Dữ liệu bên dưới là bản ghi nhận được gần nhất.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* A. Summary Metrics Row */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500">
+              Tổng quan chỉ số môi trường & Thiết bị
+            </h2>
+            <span className="text-[11px] text-stone-400">
+              Cập nhật qua luồng WebSocket
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {/* Air Temperature - ONLY shown when present in telemetry */}
+            {hasTemp && (
+              <SensorCard
+                title="Nhiệt độ"
+                value={greenhouse?.temperature}
+                unit={`°${greenhouse?.temperature_unit || "C"}`}
+                icon={Thermometer}
+                statusText="DHT Sensor"
+                statusVariant="neutral"
+                isStale={isStale}
+                colorTheme="green"
+              />
+            )}
+
+            {/* Air Humidity - ONLY shown when present in telemetry */}
+            {hasHumid && (
+              <SensorCard
+                title="Độ ẩm không khí"
+                value={greenhouse?.humidity}
+                unit={greenhouse?.humidity_unit || "%"}
+                icon={Droplets}
+                statusText="Độ ẩm tương đối"
+                statusVariant="neutral"
+                isStale={isStale}
+                colorTheme="blue"
+              />
+            )}
+
+            {/* Soil Moisture Raw ADC */}
+            <SensorCard
+              title="Độ ẩm đất"
+              value={greenhouse?.soil_moisture_raw}
+              unit="ADC"
+              icon={Sprout}
+              statusText={greenhouse?.soil_status}
+              statusVariant={
+                greenhouse?.soil_status?.toLowerCase() === "wet"
+                  ? "info"
+                  : greenhouse?.soil_status?.toLowerCase() === "moist"
+                  ? "success"
+                  : "warning"
+              }
+              isRaw={true}
+              isStale={isStale}
+              colorTheme="earth"
+            />
+
+            {/* Light Sensor Raw ADC */}
+            <SensorCard
+              title="Ánh sáng"
+              value={greenhouse?.light_raw}
+              unit="ADC"
+              icon={Sun}
+              statusText={greenhouse?.light_status}
+              statusVariant={
+                greenhouse?.light_status?.toLowerCase() === "bright"
+                  ? "success"
+                  : "neutral"
+              }
+              isRaw={true}
+              isStale={isStale}
+              colorTheme="sun"
+            />
+
+            {/* Rain Detection */}
+            <SensorCard
+              title="Cảm biến mưa"
+              value={flood?.rain_sensor_raw}
+              unit="ADC"
+              icon={CloudRain}
+              statusText={formatBoolean(flood?.is_raining, "Có mưa", "Trời tạnh")}
+              statusVariant={flood?.is_raining ? "info" : "neutral"}
+              isRaw={true}
+              isStale={isStale}
+              colorTheme="blue"
+            />
+
+            {/* Parking Distance */}
+            <SensorCard
+              title="Khoảng cách đỗ"
+              value={parking?.distance_cm}
+              unit="cm"
+              icon={Car}
+              statusText={formatBoolean(parking?.vehicle_detected, "Có xe đỗ", "Chỗ trống")}
+              statusVariant={parking?.vehicle_detected ? "danger" : "success"}
+              isStale={isStale}
+              colorTheme="cloud"
+            />
+
+            {/* Power Voltage (if provided) */}
+            {system?.power_voltage !== null && system?.power_voltage !== undefined && (
+              <SensorCard
+                title="Nguồn cấp"
+                value={system.power_voltage}
+                unit={system.power_unit || "V"}
+                icon={Zap}
+                statusText="Điện áp ổn định"
+                statusVariant="neutral"
+                isStale={isStale}
+                colorTheme="sun"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* B. Greenhouse & Irrigation Section */}
+        <GreenhouseSection data={greenhouse} isStale={isStale} />
+
+        {/* C. Smart Door & Smart Parking (2-column grid on desktop) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SmartDoorSection data={state?.smart_door} isStale={isStale} />
+          <ParkingSection data={state?.parking} isStale={isStale} />
+        </div>
+
+        {/* D. Rain / Drainage Pump & Security System (2-column grid on desktop) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <RainPreventionSection data={state?.flood_prevention} isStale={isStale} />
+          <SecuritySection data={state?.security} isStale={isStale} />
+        </div>
+
+        {/* E. Hardware & Gateway Metadata Section */}
+        <SystemMetadataSection project={state?.project} system={state?.system} />
+      </main>
+
+      {/* Operations Footer */}
+      <footer className="border-t border-stone-200 bg-white/70 py-4 mt-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+          <div>
+            <span>Smart Eco Garden</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+              Giao thức: HTTP POST + WebSocket Live
+            </span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}

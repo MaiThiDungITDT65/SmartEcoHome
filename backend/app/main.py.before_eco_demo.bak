@@ -1,0 +1,68 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.config import get_settings
+from app.routes import connection_manager, router, state_manager
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("smart_eco_garden")
+
+settings = get_settings()
+
+
+async def monitor_timeout_task():
+    """
+    Background worker that checks for online -> offline transitions.
+    Broadcasts once when device connection drops, without spamming clients.
+    """
+    logger.info("Starting background telemetry timeout monitor...")
+    try:
+        while True:
+            await asyncio.sleep(settings.TIMEOUT_CHECK_INTERVAL_SECONDS)
+            if state_manager.check_timeout_transition():
+                logger.info("Device connection timeout: transitioned to offline.")
+                current_status = state_manager.get_status_response()
+                await connection_manager.broadcast({
+                    "event": "status_change",
+                    **current_status.model_dump(),
+                })
+    except asyncio.CancelledError:
+        logger.info("Telemetry timeout monitor stopped.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: spawn timeout transition monitor
+    monitor_task = asyncio.create_task(monitor_timeout_task())
+    yield
+    # Shutdown: cleanly cancel background worker
+    monitor_task.cancel()
+    try:
+        await monitor_task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(
+    title="Smart Eco Garden IoT Backend",
+    description="Real-time in-memory monitoring and telemetry transport for Smart Eco Garden",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# CORS configuration for frontend dashboard origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(router)

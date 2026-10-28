@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+:root {
+  /* Nature palette tokens
+     Xanh lá  : emerald-900 / emerald-600 / emerald-50
+     Xanh nước: sky-700    / sky-500    / sky-50
+     Nâu đất  : stone-700  / stone-500  / stone-100
+     Vàng nắng: amber-600  / amber-400  / amber-50
+     Xám mây  : slate-600  / slate-400  / slate-50
+  */
+  --background: #f5f7f4;   /* warm off-white with a hint of sage */
+  --foreground: #1c2118;   /* deep forest-ink */
+  --nature-green:  #065f46;
+  --nature-blue:   #0369a1;
+  --nature-earth:  #78350f;
+  --nature-sun:    #b45309;
+  --nature-cloud:  #475569;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular figures for telemetry data so numbers don't jump */
+.font-mono-data {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
